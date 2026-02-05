@@ -86,7 +86,7 @@ def escaneo(red):
         "-T4", 
         "--min-rate", "2000", 
         "--max-retries", "2", 
-        "--version-intensity", "0", 
+        "--version-intensity", "5", 
         "-n",  
         "--min-hostgroup", "64", 
         "-oX", "-", 
@@ -322,19 +322,29 @@ def vulnerable(lista_servicios):
         version_actual = s['version']
         ip_actual = s['ip']
         os_actual = s.get('os', 'Desconocido') # Obtenemos el OS
+        puerto_actual = s['puerto']
         hallado_local = False
 
-        # --- DETECCIÓN ESPECÍFICA DE ETERNALBLUE ---
-        es_windows_7 = "Windows 7" in version_actual or "Windows 7" in os_actual
-        es_smb = "microsoft-ds" in version_actual.lower()
+        v_low = version_actual.lower()
+        os_low = os_actual.lower()
 
-        if es_windows_7 and es_smb:
-            print(f"\n{RED}[!!!] ALERTA CRÍTICA en {ip_actual}: POSIBLE ETERNALBLUE (MS17-010){RESET}")
-            print(f"    {YELLOW}OS: {os_actual} | Servicio: {version_actual}{RESET}")
-            print(f"    {RED}CVE asociado: CVE-2017-0144{RESET}")
-            buscar_exploits([{"version": "MS17-010", "ip": ip_actual}]) # Forzamos búsqueda exacta
-            hallado_local = True
-            continue # Pasamos al siguiente servicio
+        # --- LÓGICA DE DETECCIÓN CRÍTICA (Windows Legacy) ---
+        es_legacy = "windows 7" in os_low or "windows server 2008" in os_low
+        
+        if es_legacy:
+            # 1. Chequeo de BlueKeep (RDP)
+            if "ms-wbt-server" in v_low or "rdp" in v_low or puerto_actual == "3389":
+                print(f"\n{RED}[!!!] ALERTA CRÍTICA en {ip_actual}: POSIBLE BLUEKEEP (CVE-2019-0708){RESET}")
+                print(f"    {YELLOW}OS: {os_actual} | Servicio: {version_actual}{RESET}")
+                buscar_exploits([{"version": "BlueKeep", "ip": ip_actual}])
+                hallado_local = True
+
+            # 2. Chequeo de EternalBlue (SMB)
+            if "microsoft-ds" in v_low or "smb" in v_low or puerto_actual == "445":
+                print(f"\n{RED}[!!!] ALERTA CRÍTICA en {ip_actual}: POSIBLE ETERNALBLUE (MS17-010){RESET}")
+                print(f"    {YELLOW}OS: {os_actual} | Servicio: {version_actual}{RESET}")
+                buscar_exploits([{"version": "MS17-010", "ip": ip_actual}])
+                hallado_local = True
 
         for patron in patrones_vulnerables:
             if re.search(patron, version_actual, re.IGNORECASE):
